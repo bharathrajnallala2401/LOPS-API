@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_4f57cc03_8b50_480c_bedc_26daa3cf2535_Output_Payload = Array<{  customerStatus: "Active" | "Inactive" | "Blocked",   firstName: String,   lastName: String,   kycStatus: "Completed" | "Rejected" | "Pending",   createdDate: String,   mobileNumber: String,   customerId: Number,   customerNumber: String,   message: String,   email: String,   _?: Any} {"description": "Response payload returned after successfull registration"}>
+

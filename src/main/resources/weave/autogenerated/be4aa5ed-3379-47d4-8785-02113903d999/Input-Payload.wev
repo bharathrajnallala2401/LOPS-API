@@ -1,0 +1,27 @@
+%dw 2.0
+
+type auto_be4aa5ed_3379_47d4_8785_02113903d999_Input_Payload = {
+  lastName: String, 
+  pincode: String, 
+  occupation: String, 
+  gender: "Male" | "Female" | "Other", 
+  city: String, 
+  employmentType: "Government" | "Retired" | "Private" | "Self Employed" | "Student" | "Business", 
+  mobileNumber: String, 
+  companyName?: String, 
+  accountType: "Salary" | "Savings" | "Current", 
+  dateOfBirth: String, 
+  panNumber: String, 
+  accountNumber: String, 
+  monthlyExpense: Number, 
+  firstName: String, 
+  aadhaarNumber: String, 
+  addressLine1: String, 
+  addressLine2: String, 
+  state: String, 
+  email: String, 
+  monthlyIncome: Number, 
+  _?: Any
+} {"description": "Request payload used to register a new customer.",
+"label": "Customer Request"}
+

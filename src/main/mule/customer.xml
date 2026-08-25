@@ -1,0 +1,262 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd">
+	<flow name="post-customer-flow" doc:id="be4aa5ed-3379-47d4-8785-02113903d999" >
+		<logger level="INFO" doc:name="Logger" doc:id="6aeb3394-1312-4bf8-bd1f-634bb6853c3f" message="Creating customer with PAN #[payload.panNumber] and Mobile #[payload.mobileNumber]"/>
+		<ee:transform doc:name="Transform Message" doc:id="a51ee5c7-5910-4783-b341-ed70f90b859d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+{
+    customerNumber: "CUST" ++ (now() as String {format: "yyMMddHHmm"}),
+    firstName: payload.firstName,
+    lastName: payload.lastName,
+    gender: payload.gender,
+    dateOfBirth: payload.dateOfBirth,
+    mobileNumber: payload.mobileNumber,
+    email: payload.email,
+    aadhaarNumber: payload.aadhaarNumber,
+    panNumber: payload.panNumber,
+    addressLine1: payload.addressLine1,
+    addressLine2: payload.addressLine2,
+    city: payload.city,
+    state: payload.state,
+    pincode: payload.pincode,
+    occupation: payload.occupation,
+    employmentType: payload.employmentType,
+    companyName: payload.companyName,
+    monthlyIncome: payload.monthlyIncome,
+    monthlyExpense: payload.monthlyExpense,
+    accountNumber: payload.accountNumber,
+    accountType: payload.accountType,
+    kycStatus: "Pending",
+    customerStatus: "Active"
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[payload.customerNumber]" doc:name="Set Variable" doc:id="da70d430-0439-4270-b8e3-ecc4c3c77d9d" variableName="customerNumber"/>
+		<db:insert doc:name="Insert" doc:id="3b29cd0a-340f-43f4-8ef2-00e7d936ac89" config-ref="Database_Config">
+			<db:sql ><![CDATA[INSERT INTO customer
+(
+customer_number,
+first_name,
+last_name,
+gender,
+date_of_birth,
+mobile_number,
+email,
+aadhaar_number,
+pan_number,
+address_line1,
+address_line2,
+city,
+state,
+pincode,
+occupation,
+employment_type,
+company_name,
+monthly_income,
+monthly_expense,
+account_number,
+account_type,
+credit_score,
+branch_id,
+kyc_status,
+customer_status
+)
+VALUES
+(
+:customerNumber,
+:firstName,
+:lastName,
+:gender,
+:dateOfBirth,
+:mobileNumber,
+:email,
+:aadhaarNumber,
+:panNumber,
+:addressLine1,
+:addressLine2,
+:city,
+:state,
+:pincode,
+:occupation,
+:employmentType,
+:companyName,
+:monthlyIncome,
+:monthlyExpense,
+:accountNumber,
+:accountType,
+0,
+1,
+:kycStatus,
+:customerStatus
+);]]></db:sql>
+			<db:input-parameters ><![CDATA[#[%dw 2.0
+output application/java
+---
+payload]]]></db:input-parameters>
+		</db:insert>
+		<db:select doc:name="Select" doc:id="03bd48bd-605d-4759-8ca0-620c004647be" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT *
+FROM customer
+WHERE customer_number = :customerNumber;]]></db:sql>
+			<db:input-parameters ><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+    customerNumber: vars.customerNumber
+}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="3397ba99-264a-482e-aa49-6bdf55037696" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+var customer = payload[0]
+
+---
+{
+    customerId: customer.customer_id,
+    customerNumber: customer.customer_number,
+    firstName: customer.first_name,
+    lastName: customer.last_name,
+    mobileNumber: customer.mobile_number,
+    email: customer.email,
+    customerStatus: customer.customer_status,
+    kycStatus: customer.kyc_status,
+    message: "Customer registered successfully."
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="get-all-customer-data" doc:id="4f57cc03-8b50-480c-bedc-26daa3cf2535" >
+		<logger level="INFO" doc:name="Logger" doc:id="f8228e4f-573b-4a1e-bba5-5bc286c77ba8" message="Received request to fetch all customers."/>
+		<db:select doc:name="Select" doc:id="9caaeeaf-a2f9-484e-9a98-30692abc426b" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT
+    customer_id,
+    customer_number,
+    first_name,
+    last_name,
+    gender,
+    date_of_birth,
+    mobile_number,
+    email,
+    aadhaar_number,
+    pan_number,
+    address_line1,
+    address_line2,
+    city,
+    state,
+    pincode,
+    occupation,
+    employment_type,
+    company_name,
+    monthly_income,
+    monthly_expense,
+    account_number,
+    account_type,
+    credit_score,
+    customer_status,
+    kyc_status,
+    created_date
+FROM customer;]]></db:sql>
+			<db:input-parameters ><![CDATA[#[%dw 2.0
+output application/java
+---
+{}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="4973f3f6-dc51-477b-82f7-e725b03e6ef3" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map (customer) -> {
+    customerId: customer.customer_id,
+    customerNumber: customer.customer_number,
+    firstName: customer.first_name,
+    lastName: customer.last_name,
+    mobileNumber: customer.mobile_number,
+    email: customer.email,
+    customerStatus: customer.customer_status,
+    kycStatus: customer.kyc_status,
+    createdDate: customer.created_date
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="77b08c12-4496-4460-b2db-12b3289906ed" message="Successfully retrieved customer list."/>
+	</flow>
+	<flow name="get-customerDetails-ID" doc:id="d99caa24-fe33-48ea-973e-4f31b2914f69" >
+		<logger level="INFO" doc:name="Logger" doc:id="d4d30cea-235b-4433-9f94-ff032c7319e4" message="Received request to fetch customer by ID #[attributes.uriParams.customerId]"/>
+		<db:select doc:name="Select" doc:id="7a8a5fd6-648d-4527-b845-5f66ca8071d4" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT
+    customer_id,
+    customer_number,
+    first_name,
+    last_name,
+    gender,
+    date_of_birth,
+    mobile_number,
+    email,
+    aadhaar_number,
+    pan_number,
+    address_line1,
+    address_line2,
+    city,
+    state,
+    pincode,
+    occupation,
+    employment_type,
+    company_name,
+    monthly_income,
+    monthly_expense,
+    account_number,
+    account_type,
+    credit_score,
+    customer_status,
+    kyc_status,
+    created_date
+FROM customer
+WHERE customer_id = :customerId]]></db:sql>
+			<db:input-parameters ><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+    customerId: attributes.uriParams.customerId as Number
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="d9a17819-9510-4e49-a1d8-7ea894f1c333" >
+			<when expression="#[isEmpty(payload)]">
+				<set-variable value="404" doc:name="Set Variable" doc:id="d3ec3463-3580-419c-b4f9-713361ad278f" variableName="httpStatus"/>
+				<set-payload value='#[{&#10;  "message": "Customer not found"&#10;}]' doc:name="Set Payload" doc:id="9e6e60d9-c291-4a6c-a859-e902b413d590" />
+			</when>
+		</choice>
+		<ee:transform doc:name="Transform Message" doc:id="bcad2d47-6855-4436-8c31-d641a59e4e41">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+
+var customer = payload[0]
+
+---
+{
+    customerId: customer.customer_id,
+    customerNumber: customer.customer_number,
+    firstName: customer.first_name,
+    lastName: customer.last_name,
+    gender: customer.gender,
+    mobileNumber: customer.mobile_number,
+    email: customer.email,
+    customerStatus: customer.customer_status,
+    kycStatus: customer.kyc_status,
+    creditScore: customer.credit_score
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+	</flow>
+</mule>
