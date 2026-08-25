@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:request-config name="HTTP_Request_8081" doc:name="HTTP Request config" doc:id="0ea5877a-ce4a-438b-b362-58753165e8ec" >
+		<http:request-connection host="localhost" port="8081" connectionIdleTimeout="300000"/>
+	</http:request-config>
+	<http:request-config name="HTTP_Request_8082" doc:name="HTTP Request config" doc:id="fb5f0626-862c-4d56-bc5d-19d4689cad56" >
+		<http:request-connection host="localhost" port="8082" />
+	</http:request-config>
+	<flow name="loan-application-flow" doc:id="7ce01bfb-2754-427e-a93b-6e99cbc5e234" >
+		<set-variable value="#[payload]" doc:name="loan Request" doc:id="70f509c8-0052-463b-83fe-e530559c8e49" variableName="loanRequest"/>
+		<http:request doc:name="customer-HTTP-Request" doc:id="b6f2ae5f-b5e1-4fa6-827c-66fae93ba8e7" config-ref="HTTP_Request_8081" path='#["api/customers/" ++ (vars.loanRequest.customerId as String)]' responseTimeout="200000"/>
+		<logger level="INFO" doc:name="Logger" doc:id="95318dc8-d094-4e56-8a4c-cd747560f372" message="#[payload]"/>
+		<choice doc:name="Choice" doc:id="8d1196df-cfe2-40cc-97ac-d8b214d4266b" >
+			<when expression='#[payload.customerStatus == "Active" and payload.kycStatus == "Completed"]'>
+				<choice doc:name="Choice" doc:id="3fc08a92-6925-4752-9ef8-112a491904bc">
+			<when expression="#[payload.creditScore &gt;= 850]">
+				<set-variable value="#[9.25]" doc:name="Set Variable" doc:id="468ebc68-bb5c-4edd-a398-7a812d625286" variableName="interestRate" />
+				<flow-ref doc:name="Flow Reference" doc:id="e50006ef-323b-4580-9da4-606f7e08ff56" name="create-loan-subflow" />
+			</when>
+			<when expression="#[payload.creditScore &gt;= 750]">
+				<set-variable value="#[10.00]" doc:name="Set Variable" doc:id="4a2bab5e-2e43-4551-9950-930f96e9c6b0" variableName="interestRate" />
+				<flow-ref doc:name="Flow Reference" doc:id="2f573f62-cbf4-4520-8b49-3128c442a62a" name="create-loan-subflow" />
+			</when>
+			<when expression="#[payload.creditScore &gt;= 650]">
+				<set-variable value="#[10.75]" doc:name="Set Variable" doc:id="dc6a258a-89e8-4e22-8db4-1ca23c4d9dda" variableName="interestRate" />
+				<flow-ref doc:name="Flow Reference" doc:id="ed5b9f2c-df3b-4f15-bd4c-67e6aa5e27a0" name="create-loan-subflow" />
+			</when>
+					<otherwise >
+						<ee:transform doc:name="Transform Message" doc:id="b3ba1b2d-4f25-49d7-91fa-058227500094" >
+							<ee:message >
+								<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    status: "REJECTED",
+    message: "Loan application rejected due to low credit score."
+}]]></ee:set-payload>
+							</ee:message>
+						</ee:transform>
+					</otherwise>
+		</choice>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="dc0b404f-dfcf-4a98-83d5-00ccaf049b12" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    status: "REJECTED",
+    message: "Loan application rejected because customer is inactive or KYC is not completed."
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+	</flow>
+	<sub-flow name="create-loan-subflow" doc:id="8613f163-9037-460b-8dff-8c49c13c4386" >
+		<ee:transform doc:name="Transform Message" doc:id="d3882922-93f7-41d0-bb5c-b03ce372b426" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    customer_id: vars.loanRequest.customerId as Number,
+    loan_type_id: vars.loanRequest.loanTypeId as Number,
+    loan_amount: vars.loanRequest.loanAmount as Number,
+    tenure_months: vars.loanRequest.tenureMonths as Number,
+    interest_rate: vars.interestRate as Number
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="db710fd0-87a3-491e-afbe-c05bc2fd01d6" message='#[write(payload, "application/json")]'/>
+		<http:request doc:name="Request" doc:id="163b2ae0-69e5-48f7-bd85-23e941873a41" method="POST" config-ref="HTTP_Request_8082" path="/api/loans">
+		</http:request>
+		<ee:transform doc:name="Transform Message" doc:id="e4daef7c-6f69-46b2-b177-2e979d3ff675" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    applicationStatus: "APPROVED",
+    message: "Loan application approved successfully",
+    loanNumber: payload.loanNumber,
+    customerId: vars.loanRequest.customerId,
+    loanAmount: vars.loanRequest.loanAmount,
+    interestRate: vars.interestRate,
+    tenureMonths: vars.loanRequest.tenureMonths
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</sub-flow>
+</mule>

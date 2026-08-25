@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_8613f163_9037_460b_8dff_8c49c13c4386_Input_Variables_loanRequest = Any
+
