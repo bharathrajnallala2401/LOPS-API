@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="cb193679-d0c1-440c-b76d-bc3e15babeb4" >
+		<db:my-sql-connection host="${db.host}" port="${db.port}" user="${db.username}" password="${db.password}" database="${db.name}" />
+	</db:config>
+	<flow doc:id="f50083a8-fe96-4e8a-b0c0-9a2a9666b8ab" name="post-loan-flow">
+		<logger level="INFO" doc:name="Logger" doc:id="d7db9193-e723-4f6d-844e-18c3eeb65217" message="Request logger" category='"Loan creation request received : #[payload]" /&gt;'/>
+		<set-variable value="#[payload]" doc:name="loanRequest" doc:id="eb3d51f4-9011-4f9b-9c4a-16320b050722" variableName="loanRequest"/>
+		<db:select doc:name="Latest Loan Number" doc:id="8175c6eb-cd38-4b27-a0a7-3e5b83f02ec6" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT loan_number
+FROM loan
+ORDER BY loan_number DESC
+LIMIT 1;]]></db:sql>
+		</db:select>
+		<ee:transform doc:name="Generate loanNumber" doc:id="ceb6f5f6-7f2a-4db4-8a44-e4e884066bd1" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+
+var lastLoan =
+    if (isEmpty(payload))
+        "LN000000"
+    else
+        payload[0].loan_number
+
+var nextNumber =
+    (lastLoan[2 to -1] as Number) + 1
+
+---
+"LN" ++ (nextNumber as String {format:"000000"})]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable doc:name="loanNumber" doc:id="c300e407-aa77-4c90-bfbd-f03713907a94" variableName="loanNumber" value="#[payload]"/>
+		<ee:transform doc:name="calculate EMI" doc:id="65b640a2-01f5-4222-a8c8-daf3fd3480e2" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+
+var P = vars.loanRequest.loan_amount as Number
+var annualRate = vars.loanRequest.interest_rate as Number
+var R = annualRate / 12 / 100
+var N = vars.loanRequest.tenure_months as Number
+
+var power = pow(1 + R, N)
+
+---
+(P * R * power) / (power - 1)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value="#[payload]" doc:name="emiAmount" doc:id="e1cb3a29-8a71-4388-b4bb-b856e3265530" variableName="emiAmount"/>
+		<ee:transform doc:name="build-insert-payload" doc:id="aad8f2c2-3e63-40b9-81fa-7fe3d32c6cae" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+
+---
+{
+    loan_number: vars.loanNumber,
+    customer_id: vars.loanRequest.customer_id,
+    loan_type_id: vars.loanRequest.loan_type_id,
+    loan_amount: vars.loanRequest.loan_amount,
+    interest_rate: vars.loanRequest.interest_rate,
+    tenure_months: vars.loanRequest.tenure_months,
+    emi_amount: vars.emiAmount,
+    outstanding_amount: vars.loanRequest.loan_amount,
+    loan_status: "Applied",
+    application_date: now() as Date,
+    approval_date: null,
+    disbursement_date: null,
+    closure_date: null,
+    remarks: null
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<db:insert doc:name="insert" doc:id="e3db6c5c-c124-4f51-b644-984168e09d30" config-ref="Database_Config">
+			<db:sql ><![CDATA[INSERT INTO loan
+(
+loan_number,
+customer_id,
+loan_type_id,
+loan_amount,
+interest_rate,
+tenure_months,
+emi_amount,
+outstanding_amount,
+loan_status,
+application_date,
+approval_date,
+disbursement_date,
+closure_date,
+remarks
+)
+VALUES
+(
+:loan_number,
+:customer_id,
+:loan_type_id,
+:loan_amount,
+:interest_rate,
+:tenure_months,
+:emi_amount,
+:outstanding_amount,
+:loan_status,
+:application_date,
+:approval_date,
+:disbursement_date,
+:closure_date,
+:remarks
+)]]></db:sql>
+			<db:input-parameters ><![CDATA[#[payload]]]></db:input-parameters>
+		</db:insert>
+		<ee:transform doc:name="success response" doc:id="6a386aec-0551-418f-aa1b-1bdf9474a5ba" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    message: "Loan created successfully",
+    loanNumber: vars.loanNumber
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Response Logger" doc:id="27bf5835-b303-4d2e-8987-c9839c4f284f" message='"Loan created successfully : #[payload]"'/>
+	</flow>
+	<flow name="get-all-loans-flow" doc:id="cf32e8e8-376c-4f92-8104-e45c3ccea224" >
+		<logger level="INFO" doc:name="Request Logger" doc:id="2a1ca658-30dc-44c3-91f6-0730de6dd1f8" message="Fetching all loans"/>
+		<db:select doc:name="Select" doc:id="31597421-8fd7-46b2-8b8e-52c34de86448" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT
+    loan_number,
+    customer_id,
+    loan_type_id,
+    loan_amount,
+    interest_rate,
+    tenure_months,
+    emi_amount,
+    outstanding_amount,
+    loan_status,
+    application_date,
+    approval_date,
+    disbursement_date,
+    closure_date,
+    remarks
+FROM loan;]]></db:sql>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="eb734b80-812e-4343-8816-6df83846b3d0" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map (loan) -> {
+    loan_number: loan.loan_number,
+    customer_id: loan.customer_id,
+    loan_type_id: loan.loan_type_id,
+    loan_amount: loan.loan_amount,
+    interest_rate: loan.interest_rate,
+    tenure_months: loan.tenure_months,
+    emi_amount: loan.emi_amount,
+    outstanding_amount: loan.outstanding_amount,
+    loan_status: loan.loan_status,
+    application_date: loan.application_date,
+    approval_date: loan.approval_date,
+    disbursement_date: loan.disbursement_date,
+    closure_date: loan.closure_date,
+    remarks: loan.remarks
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="46f6ab3b-09f0-4218-9adf-03926b008277" message="Response Logger" category='"Successfully fetched all loans"'/>
+	</flow>
+	<flow name="get-loan-by-number-flow" doc:id="632d706b-eadd-480a-8223-0de323e8a000" >
+		<logger level="INFO" doc:name="Logger" doc:id="2e2022ab-3fa2-40b5-9f44-27ac2d490e9d" message="Request logger for loan by number"/>
+		<logger level="INFO" doc:name="Loan Number Logger" doc:id="f0bec7ea-c137-4cb7-900e-978f8f60e711" message='"URI Params = #[attributes.uriParams]"'/>
+		<db:select doc:name="Select" doc:id="31c698ed-c5ae-4c9a-8c93-691fc40368a2" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT
+    loan_number,
+    customer_id,
+    loan_type_id,
+    loan_amount,
+    interest_rate,
+    tenure_months,
+    emi_amount,
+    outstanding_amount,
+    loan_status,
+    application_date,
+    approval_date,
+    disbursement_date,
+    closure_date,
+    remarks
+FROM loan
+WHERE loan_number = :loanNumber;]]></db:sql>
+			<db:input-parameters ><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+    loanNumber: attributes.uriParams.loanNumber
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="9e574ece-85c2-4f6a-b9f8-ddec0e065b35" >
+			<when expression="#[isEmpty(payload)]">
+				<ee:transform doc:name="Transform Message" doc:id="fa977de5-8bca-42aa-848d-fa018bb509cb" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    message: "Loan not found"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="23f3d4a0-9580-4753-ae95-3b204956ef44" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload[0]]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+		<logger level="INFO" doc:name="Logger" doc:id="6c4508a8-7130-4958-a456-0671c25ad073" message="Response Logger" category='"Loan details fetched successfully"'/>
+	</flow>
+	<flow name="status-loan-flow" doc:id="03f69545-94c6-4278-9493-cf4fd004b097" >
+		<db:update doc:name="Update" doc:id="7d57417d-93be-4cd9-97fa-73266517f930" />
+	</flow>
+</mule>

@@ -1,0 +1,10 @@
+db:
+  host: localhost
+  port: "3306"
+  name: loan_management
+  username: root
+  password: Training@Mule
+
+http:
+  host: 0.0.0.0
+  port: "8081"
