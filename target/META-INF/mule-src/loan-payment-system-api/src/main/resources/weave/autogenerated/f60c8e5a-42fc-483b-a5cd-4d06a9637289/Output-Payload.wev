@@ -1,0 +1,18 @@
+%dw 2.0
+
+type auto_f60c8e5a_42fc_483b_a5cd_4d06a9637289_Output_Payload = {
+  amount_paid: Number, 
+  payment_mode: String, 
+  loan_number: String, 
+  installment_number: Number, 
+  payment_id: Number, 
+  payment_status: String, 
+  due_date: String, 
+  principal_amount: Number, 
+  transaction_reference: String, 
+  created_date: String, 
+  payment_date: String, 
+  interest_amount: Number, 
+  _?: Any
+}
+

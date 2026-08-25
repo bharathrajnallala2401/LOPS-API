@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<flow name="post-loan-payment" doc:id="c6fe7f37-de72-410d-9cac-a0091e8cff63" >
+		<logger level="INFO" doc:name="" doc:id="686d45a7-8dd7-4cb0-aa72-a67130f1e556" message="Received payment request"/>
+		<set-variable value="#[payload]" doc:name="paymentRequest" doc:id="1dc748fa-04d4-42bf-bf6f-3fac5a922279" variableName="paymentRequest"/>
+		<db:select doc:name="Select" doc:id="eabf2560-ef26-4f6b-9b43-9b68da1fd583" config-ref="Database_Config">
+			<db:sql ><![CDATA[select 
+	loan_id,
+	customer_id,
+	loan_amount,
+	interest_rate,
+	tenure_months,
+	emi_amount,
+	outstanding_amount,
+	loan_status,
+	approval_date
+from loan
+where loan_number = :loanNumber;]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+loanNumber: vars.paymentRequest.loan_number
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="5bdcb0b9-4925-41e6-b53d-846b58cbcf49" >
+			<when expression="#[isEmpty(payload)]">
+				<ee:transform doc:name="Transform Message" doc:id="16d51f91-f555-4e5d-abd8-0b942745db0e" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	message: "Loan not found"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Logger" doc:id="7d20aa4b-2fcf-4c00-8fa4-10fe9cb39af9" message="loan found. Proceeding with payment processing. "/>
+				<ee:transform doc:name="Build Payment Object" doc:id="f34def00-4827-40aa-be4d-65abe2dc2033">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/java
+
+var loan = payload[0]
+
+---
+{
+    loan_id: loan.loan_id,
+    installment_number: vars.paymentRequest.installment_number,
+    payment_date: vars.paymentRequest.payment_date,
+    due_date: vars.paymentRequest.payment_date,
+    amount_paid: loan.emi_amount,
+    principal_amount: 0,
+    interest_amount: 0,
+    payment_mode: vars.paymentRequest.payment_mode,
+    payment_status: "Paid",
+    transaction_reference: vars.paymentRequest.transaction_reference,
+    created_date: now()
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+		<set-variable value="#[payload]" doc:name="paymentRecord" doc:id="d5e202c1-920a-4bf4-8cb8-22f93da9430e" variableName="paymentRecord"/>
+		<db:insert doc:name="Insert" doc:id="30c081e1-4b37-4b38-bc0b-9f3559c107c1" config-ref="Database_Config">
+			<db:sql ><![CDATA[INSERT INTO loan_payment
+(
+    loan_id,
+    installment_number,
+    payment_date,
+    due_date,
+    amount_paid,
+    principal_amount,
+    interest_amount,
+    payment_mode,
+    payment_status,
+    transaction_reference,
+    created_date
+)
+VALUES
+(
+    :loan_id,
+    :installment_number,
+    :payment_date,
+    :due_date,
+    :amount_paid,
+    :principal_amount,
+    :interest_amount,
+    :payment_mode,
+    :payment_status,
+    :transaction_reference,
+    :created_date
+);]]></db:sql>
+			<db:input-parameters ><![CDATA[#[payload]]]></db:input-parameters>
+		</db:insert>
+		<db:update doc:name="Update" doc:id="e600f5f7-856d-4eef-b1b2-4ddbb0c76ef3" config-ref="Database_Config">
+			<db:sql ><![CDATA[UPDATE loan
+SET
+    outstanding_amount = outstanding_amount - :amountPaid
+WHERE loan_id = :loanId;]]></db:sql>
+			<db:input-parameters ><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+    amountPaid: vars.paymentRecord.amount_paid,
+    loanId: vars.paymentRecord.loan_id
+}]]]></db:input-parameters>
+		</db:update>
+		<db:select doc:name="Select" doc:id="d700410c-9fa1-4e19-aac4-06b363276980" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT
+    lp.payment_id,
+    l.loan_number,
+    lp.installment_number,
+    lp.payment_date,
+    lp.due_date,
+    lp.amount_paid,
+    lp.principal_amount,
+    lp.interest_amount,
+    lp.payment_mode,
+    lp.payment_status,
+    lp.transaction_reference,
+    lp.created_date
+FROM loan_payment lp
+JOIN loan l
+    ON lp.loan_id = l.loan_id
+WHERE lp.transaction_reference = :transactionReference;]]></db:sql>
+			<db:input-parameters ><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+    transactionReference: vars.paymentRecord.transaction_reference
+}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="09f5b39e-2d77-40da-b410-81b04c1a193a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+var payment = payload[0]
+
+---
+{
+    payment_id: payment.payment_id,
+    loan_number: payment.loan_number,
+    installment_number: payment.installment_number,
+    payment_date: payment.payment_date,
+    due_date: payment.due_date,
+    amount_paid: payment.amount_paid,
+    principal_amount: payment.principal_amount,
+    interest_amount: payment.interest_amount,
+    payment_mode: payment.payment_mode,
+    payment_status: payment.payment_status,
+    transaction_reference: payment.transaction_reference,
+    created_date: payment.created_date
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="get-loan-payment-flow" doc:id="782104a9-86a3-4a18-abe4-8b2c9da0a097" >
+		<logger level="INFO" doc:name="Logger" doc:id="ffaa4225-007b-480a-b22b-7c1d9afb63cb" message="Fetching all loan payments"/>
+		<db:select doc:name="Select" doc:id="8da817b4-81d6-41a6-a23b-d2f4a16e0ca1" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT
+    lp.payment_id,
+    l.loan_number,
+    lp.installment_number,
+    lp.payment_date,
+    lp.due_date,
+    lp.amount_paid,
+    lp.principal_amount,
+    lp.interest_amount,
+    lp.payment_mode,
+    lp.payment_status,
+    lp.transaction_reference,
+    lp.created_date
+FROM loan_payment lp
+JOIN loan l
+    ON lp.loan_id = l.loan_id
+ORDER BY lp.payment_id;]]></db:sql>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="0c1d2cbe-9e62-4e61-a05a-b821a394907a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload map (payment) -> {
+    payment_id: payment.payment_id,
+    loan_number: payment.loan_number,
+    installment_number: payment.installment_number,
+    payment_date: payment.payment_date,
+    due_date: payment.due_date,
+    amount_paid: payment.amount_paid,
+    principal_amount: payment.principal_amount,
+    interest_amount: payment.interest_amount,
+    payment_mode: payment.payment_mode,
+    payment_status: payment.payment_status,
+    transaction_reference: payment.transaction_reference,
+    created_date: payment.created_date
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="get-loan-payment-by-ID" doc:id="f60c8e5a-42fc-483b-a5cd-4d06a9637289" >
+		<logger level="INFO" doc:name="Logger" doc:id="669f898e-b388-4b48-9cfd-b1d3cbb1c510" message="Fetching payment by Payment ID"/>
+		<db:select doc:name="Select" doc:id="bb4444a2-d2bc-43f3-aa86-a80edb65c24b" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT
+    lp.payment_id,
+    l.loan_number,
+    lp.installment_number,
+    lp.payment_date,
+    lp.due_date,
+    lp.amount_paid,
+    lp.principal_amount,
+    lp.interest_amount,
+    lp.payment_mode,
+    lp.payment_status,
+    lp.transaction_reference,
+    lp.created_date
+FROM loan_payment lp
+JOIN loan l
+    ON lp.loan_id = l.loan_id
+WHERE lp.payment_id = :paymentId;]]></db:sql>
+			<db:input-parameters ><![CDATA[#[%dw 2.0
+output application/java
+---
+{
+    paymentId: attributes.uriParams.paymentId
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="1f49c86f-37b0-49fc-b7ed-29beee00bd79" >
+			<when expression="#[isEmpty(payload)]">
+				<ee:transform doc:name="Transform Message" doc:id="b771d299-e7ed-42a1-999f-fda5b7a3d6ed" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+    message: "Payment not found"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="4c767bd2-9592-4e7a-b305-137760201341" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+var payment = payload[0]
+
+---
+{
+    payment_id: payment.payment_id,
+    loan_number: payment.loan_number,
+    installment_number: payment.installment_number,
+    payment_date: payment.payment_date,
+    due_date: payment.due_date,
+    amount_paid: payment.amount_paid,
+    principal_amount: payment.principal_amount,
+    interest_amount: payment.interest_amount,
+    payment_mode: payment.payment_mode,
+    payment_status: payment.payment_status,
+    transaction_reference: payment.transaction_reference,
+    created_date: payment.created_date
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+	</flow>
+</mule>

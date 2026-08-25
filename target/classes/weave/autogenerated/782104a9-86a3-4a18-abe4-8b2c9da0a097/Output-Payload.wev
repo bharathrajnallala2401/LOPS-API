@@ -1,0 +1,4 @@
+%dw 2.0
+
+type auto_782104a9_86a3_4a18_abe4_8b2c9da0a097_Output_Payload = Array<{  amount_paid: Number,   payment_mode: String,   loan_number: String,   installment_number: Number,   payment_id: Number,   payment_status: String,   due_date: String,   principal_amount: Number,   transaction_reference: String,   created_date: String,   payment_date: String,   interest_amount: Number,   _?: Any}>
+

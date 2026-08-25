@@ -1,0 +1,23 @@
+%dw 2.0
+
+type auto_f60c8e5a_42fc_483b_a5cd_4d06a9637289_Input_Attributes = {|
+  clientCertificate?: {|
+    publicKey?: {|  |}, 
+    "type"?: String, 
+    encoded?: Binary
+  |}, 
+  headers: {|  |}, 
+  listenerPath: String, 
+  method: String, 
+  queryParams: {|  |}, 
+  queryString: String, 
+  relativePath: String, 
+  remoteAddress: String, 
+  requestPath: String, 
+  requestUri: String, 
+  scheme: String, 
+  uriParams: {| paymentId: Number |}, 
+  version: String, 
+  localAddress: String
+|}
+
