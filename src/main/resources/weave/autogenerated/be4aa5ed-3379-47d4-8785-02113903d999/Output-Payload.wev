@@ -1,0 +1,16 @@
+%dw 2.0
+
+type auto_be4aa5ed_3379_47d4_8785_02113903d999_Output_Payload = {
+  customerStatus: "Active" | "Inactive" | "Blocked", 
+  firstName: String, 
+  lastName: String, 
+  kycStatus: "Completed" | "Rejected" | "Pending", 
+  createdDate: String, 
+  mobileNumber: String, 
+  customerId: Number, 
+  customerNumber: String, 
+  message: String, 
+  email: String, 
+  _?: Any
+} {"description": "Response payload returned after successfull registration"}
+

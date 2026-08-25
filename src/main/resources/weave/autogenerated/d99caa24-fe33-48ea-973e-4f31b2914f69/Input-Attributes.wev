@@ -1,0 +1,23 @@
+%dw 2.0
+
+type auto_d99caa24_fe33_48ea_973e_4f31b2914f69_Input_Attributes = {|
+  clientCertificate?: {|
+    publicKey?: {|  |}, 
+    "type"?: String, 
+    encoded?: Binary
+  |}, 
+  headers: {| "X-correlation-Id"?: String |}, 
+  listenerPath: String, 
+  method: String, 
+  queryParams: {|  |}, 
+  queryString: String, 
+  relativePath: String, 
+  remoteAddress: String, 
+  requestPath: String, 
+  requestUri: String, 
+  scheme: String, 
+  uriParams: {| customerId: Number |}, 
+  version: String, 
+  localAddress: String
+|}
+
